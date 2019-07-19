@@ -96,6 +96,7 @@ def collect_data(robot: cozmo.robot.Robot):
 
 def main(robot: cozmo.robot.Robot):
     robot.set_head_angle(degrees(0)).wait_for_completed()
+    robot.set_lift_height(0).wait_for_completed()
     collect_data(robot)
 
 
