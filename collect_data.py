@@ -4,6 +4,7 @@ import csv
 import os
 import time
 from argparse import ArgumentParser
+from cozmo.util import degrees
 from datetime import datetime
 
 
@@ -94,6 +95,7 @@ def collect_data(robot: cozmo.robot.Robot):
 
 
 def main(robot: cozmo.robot.Robot):
+    robot.set_head_angle(degrees(0)).wait_for_completed()
     collect_data(robot)
 
 
