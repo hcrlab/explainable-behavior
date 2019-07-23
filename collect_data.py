@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# TODO: why doesn't head angle always set properly?
 import cozmo
 import csv
 import os
