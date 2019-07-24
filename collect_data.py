@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # TODO: why doesn't head angle always set properly?
+import concurrent.futures
 import cozmo
 import csv
 import os
+import pygame
 import time
 from argparse import ArgumentParser
 from cozmo.util import degrees
@@ -50,6 +52,32 @@ def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
                 print("Stop command received")
                 print("Saved {} new data points".format(end - begin + 1))
                 break
+
+
+def drive_cozmo(robot: cozmo.robot.Robot):
+    pygame.init()
+    screen = pygame.display.set_mode((100,100))
+    
+    try:
+        while True:
+            event = pygame.event.wait()
+            if event.type == pygame.KEYDOWN:
+                keys = pygame.key.get_pressed()
+                # case 1: drive forward (up arrow key)
+                # case 2: drive backward (down arrow key)
+                # case 3: turn left (left arrow key)
+                    # turning should be left speed -x, right speed x, correct?
+                # case 4: turn right (right arrow key)
+                # case 5: drive forward while turning left (up + left)
+                # case 6: drive forward while turning right (up + right)
+                # case 7: drive backward while turning left (down + left)
+                # case 8: drive backward while turning right (down + right)
+                # do-nothing cases:
+                # case 9: do nothing (up + down)
+                # case 10: do nothing (left + right)
+                    # i guess if you press left + right + up, you should drive forward...
+                    # this is probably out of scope
+                # case 11: do nothng (everything else)
 
 
 def collect_data(robot: cozmo.robot.Robot):
