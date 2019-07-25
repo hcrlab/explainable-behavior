@@ -7,13 +7,13 @@ import os
 import pygame
 import time
 from argparse import ArgumentParser
-from cozmo.util import degrees, distance_mm, speed_mmps
+from cozmo.util import degrees
 from datetime import datetime
 
 
 def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
     global finished
-    header = ["left wheel speed", "right wheel speed", "gyro x", "gyro y", "gyro z"]
+    header = ["left wheel speed", "right wheel speed", "gyro x", "gyro y", "gyro z", "timestamp"]
 
     # where jpg filenames should begin. start at 1 so filenames match rows in csv (accounting for header row)
     start_from = 1 
@@ -38,7 +38,7 @@ def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
                 img.raw_image.save("img/{}.jpg".format(end))
                 # save speed and gyro
                 gyro = robot.gyro # might not need IMU data actually
-                row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z]
+                row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z, datetime.now().time()]
                 if verbose:
                     print("Saving data to row {}".format(end))
                 writer.writerow(row)
@@ -94,7 +94,6 @@ def drive_cozmo(robot: cozmo.robot.Robot):
             
             # send wheel speeds to cozmo
             robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1])
-            # robot.drive_straight(distance_mm(150), speed_mmps(50)).wait_for_completed()
             print("sending speeds {} and {}".format(wheel_speeds[0], wheel_speeds[1]))
 
     robot.stop_all_motors()
