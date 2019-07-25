@@ -7,11 +7,12 @@ import os
 import pygame
 import time
 from argparse import ArgumentParser
-from cozmo.util import degrees
+from cozmo.util import degrees, distance_mm, speed_mmps
 from datetime import datetime
 
 
 def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
+    global finished
     header = ["left wheel speed", "right wheel speed", "gyro x", "gyro y", "gyro z"]
 
     # where jpg filenames should begin. start at 1 so filenames match rows in csv (accounting for header row)
@@ -27,60 +28,81 @@ def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
         writer = csv.writer(file)
         if not append:
             writer.writerow(header)
-        while True: # should this be "while robot.EvtNewCameraImage:"?
-            try:
-                img = robot.world.latest_image
-                if img is not None:
-                    # save image
-                    if verbose:
-                        print("Saving image {}".format(end))
-                    img.raw_image.save("img/{}.jpg".format(end))
-                    # save speed and gyro
-                    gyro = robot.gyro # might not need IMU data actually
-                    row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z]
-                    if verbose:
-                        print("Saving data to row {}".format(end))
-                    writer.writerow(row)
-                    # update count
-                    end += 1
+        # while True: # should this be "while robot.EvtNewCameraImage:"?
+        while not finished:
+            img = robot.world.latest_image
+            if img is not None:
+                # save image
+                if verbose:
+                    print("Saving image {}".format(end))
+                img.raw_image.save("img/{}.jpg".format(end))
+                # save speed and gyro
+                gyro = robot.gyro # might not need IMU data actually
+                row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z]
+                if verbose:
+                    print("Saving data to row {}".format(end))
+                writer.writerow(row)
+                # update count
+                end += 1
 
-                # so we get ~10 images per second
-                # could try every 0.25 seconds instead? maybe 0.5?
-                time.sleep(0.1) 
+            # so we get ~10 images per second
+            # could try every 0.25 seconds instead? maybe 0.5?
+            time.sleep(0.1) 
 
-            except (KeyboardInterrupt, SystemExit):
-                print("Stop command received")
-                print("Saved {} new data points".format(end - begin + 1))
-                break
+        print("Stop command received")
+        print("Saved {} new data points".format(end - begin + 1))
 
 
 def drive_cozmo(robot: cozmo.robot.Robot):
+    global finished
+    def add_speed(wheel_speeds: tuple, addition: tuple):
+        return (wheel_speeds[0] + addition[0], wheel_speeds[1] + addition[1])
+
     pygame.init()
     screen = pygame.display.set_mode((100,100))
     
-    try:
-        while True:
-            event = pygame.event.wait()
-            if event.type == pygame.KEYDOWN:
-                keys = pygame.key.get_pressed()
-                # case 1: drive forward (up arrow key)
-                # case 2: drive backward (down arrow key)
-                # case 3: turn left (left arrow key)
-                    # turning should be left speed -x, right speed x, correct?
-                # case 4: turn right (right arrow key)
-                # case 5: drive forward while turning left (up + left)
-                # case 6: drive forward while turning right (up + right)
-                # case 7: drive backward while turning left (down + left)
-                # case 8: drive backward while turning right (down + right)
-                # do-nothing cases:
-                # case 9: do nothing (up + down)
-                # case 10: do nothing (left + right)
-                    # i guess if you press left + right + up, you should drive forward...
-                    # this is probably out of scope
-                # case 11: do nothng (everything else)
+    # all speeds in millimiters per second
+    # (left wheel speed, right wheel speed)
+    go_forward = (100, 100)
+    go_backward = (-100, -100)
+    turn_left = (-50, 50)
+    turn_right = (50, -50)
+    
+    while not finished:
+        event = pygame.event.wait() # causes issues with leaving loop on ctrl-c
+        if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+            print("keydown/up received")
+            keys = pygame.key.get_pressed()
+            # calculate wheel speeds
+            wheel_speeds = (0.0, 0.0)
+            # up arrow key
+            if keys[pygame.K_UP]:
+                print("up arrow key")
+                wheel_speeds = add_speed(wheel_speeds, go_forward)
+            # down arrow key
+            if keys[pygame.K_DOWN]:
+                print("down arrow key")
+                wheel_speeds = add_speed(wheel_speeds, go_backward)
+            # left arrow key
+            if keys[pygame.K_LEFT]:
+                print("left arrow key")
+                wheel_speeds = add_speed(wheel_speeds, turn_left)
+            # right arrow key
+            if keys[pygame.K_RIGHT]:
+                print("right arrow key")
+                wheel_speeds = add_speed(wheel_speeds, turn_right)
+            
+            # send wheel speeds to cozmo
+            robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1])
+            # robot.drive_straight(distance_mm(150), speed_mmps(50)).wait_for_completed()
+            print("sending speeds {} and {}".format(wheel_speeds[0], wheel_speeds[1]))
+
+    robot.stop_all_motors()
+    pygame.quit()
 
 
 def collect_data(robot: cozmo.robot.Robot):
+    global finished
     """Collect LfD data.
 
     Arguments:
@@ -113,7 +135,17 @@ def collect_data(robot: cozmo.robot.Robot):
         if verbose:
             print("Saving data in {} mode".format(mode))
         
-        write_data(robot, append=True if append_to else False, verbose=verbose)
+        try:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            finished = False
+            executor.submit(write_data, robot, append=True if append_to else False, verbose=verbose)
+            executor.submit(drive_cozmo, robot)
+            while not finished:
+                time.sleep(1)
+        except (KeyboardInterrupt, SystemExit):
+            finished = True
+        finally:
+            executor.shutdown(wait=True)
         print("Data saved to {}".format(os.getcwd()))
 
     except NotADirectoryError:
