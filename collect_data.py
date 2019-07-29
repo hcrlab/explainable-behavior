@@ -12,8 +12,21 @@ from datetime import datetime
 
 
 def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
-    global finished
-    header = ["left wheel speed", "right wheel speed", "gyro x", "gyro y", "gyro z", "timestamp"]
+    def add_speed(wheel_speeds: tuple, addition: tuple):
+        return (wheel_speeds[0] + addition[0], wheel_speeds[1] + addition[1])
+        
+    pygame.init()
+    screen = pygame.display.set_mode((100,100))
+    
+    # all speeds in millimiters per second
+    # (left wheel speed, right wheel speed)
+    go_forward = (100, 100)
+    go_backward = (-100, -100)
+    turn_left = (-50, 50)
+    turn_right = (50, -50)
+
+    header = ["left wheel speed", "right wheel speed", "gyro x", "gyro y", "gyro z", "pose x", "pose y", "pose z",
+        "q0", "q1", "q2", "q3", "angle_z", "origin_id", "is_accurate", "up key", "down key", "left key", "right key", "timestamp"]
 
     # where jpg filenames should begin. start at 1 so filenames match rows in csv (accounting for header row)
     start_from = 1 
@@ -28,76 +41,65 @@ def write_data(robot: cozmo.robot.Robot, append=False, verbose=False):
         writer = csv.writer(file)
         if not append:
             writer.writerow(header)
-        # while True: # should this be "while robot.EvtNewCameraImage:"?
-        while not finished:
-            img = robot.world.latest_image
-            if img is not None:
-                # save image
-                if verbose:
-                    print("Saving image {}".format(end))
-                img.raw_image.save("img/{}.jpg".format(end))
-                # save speed and gyro
-                gyro = robot.gyro # might not need IMU data actually
-                row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z, datetime.now().time()]
-                if verbose:
-                    print("Saving data to row {}".format(end))
-                writer.writerow(row)
-                # update count
-                end += 1
+        while True: # should this be "while robot.EvtNewCameraImage:"?
+            try:
+                # drive cozmo
+                event = pygame.event.poll()
+                if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+                    keys = pygame.key.get_pressed()
+                    arrows = {"up": keys[pygame.K_UP], "down": keys[pygame.K_DOWN], "left": keys[pygame.K_LEFT], "right": keys[pygame.K_RIGHT]}
+                    # calculate wheel speeds
+                    wheel_speeds = (0.0, 0.0)
+                    # up arrow key
+                    if arrows["up"]:
+                        wheel_speeds = add_speed(wheel_speeds, go_forward)
+                    # down arrow key
+                    if arrows["down"]:
+                        wheel_speeds = add_speed(wheel_speeds, go_backward)
+                    # left arrow key
+                    if arrows["left"]:
+                        wheel_speeds = add_speed(wheel_speeds, turn_left)
+                    # right arrow key
+                    if arrows["right"]:
+                        wheel_speeds = add_speed(wheel_speeds, turn_right)
+                    
+                    # send wheel speeds to cozmo
+                    robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1])
+                    print("sending speeds {} and {}".format(wheel_speeds[0], wheel_speeds[1]))
 
-            # so we get ~10 images per second
-            # could try every 0.25 seconds instead? maybe 0.5?
-            time.sleep(0.1) 
+                # save data
+                img = robot.world.latest_image
+                if img is not None:
+                    # save image
+                    if verbose:
+                        print("Saving image {}".format(end))
+                    img.raw_image.save("img/{}.jpg".format(end))
+                    # save time/speed/pose data
+                    present_time = datetime.now().time()
+                    lws = robot.left_wheel_speed.speed_mmps
+                    rws = robot.right_wheel_speed.speed_mmps
+                    gyro = robot.gyro
+                    pose = robot.pose
+                    row = [robot.left_wheel_speed.speed_mmps, robot.right_wheel_speed.speed_mmps, gyro.x, gyro.y, gyro.z, datetime.now().time()]
+                    row = [robot.pose.position, robot.pose.rotation]
+                    row = [lws, rws, gyro.x, gyro.y, gyro.z, pose.position.x, pose.position.y, pose.position.z, pose.rotation.q0, pose.rotation.q1, pose.rotation.q2,
+                        pose.rotation.q3, pose.rotation.angle_z.radians, pose.origin_id, pose.is_accurate, arrows["up"], arrows["down"], arrows["left"],
+                        arrows["right"], present_time]
+                    if verbose:
+                        print("Saving data to row {}".format(end))
+                    writer.writerow(row)
+                    # update count
+                    end += 1
+
+                # so we get ~10 images per second
+                # could try every 0.25 seconds instead? maybe 0.5?
+                time.sleep(0.1) 
 
         print("Stop command received")
         print("Saved {} new data points".format(end - begin + 1))
 
-
-def drive_cozmo(robot: cozmo.robot.Robot):
-    global finished
-    def add_speed(wheel_speeds: tuple, addition: tuple):
-        return (wheel_speeds[0] + addition[0], wheel_speeds[1] + addition[1])
-
-    pygame.init()
-    screen = pygame.display.set_mode((100,100))
-    
-    # all speeds in millimiters per second
-    # (left wheel speed, right wheel speed)
-    go_forward = (100, 100)
-    go_backward = (-100, -100)
-    turn_left = (-50, 50)
-    turn_right = (50, -50)
-    
-    while not finished:
-        event = pygame.event.wait() # causes issues with leaving loop on ctrl-c
-        if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
-            print("keydown/up received")
-            keys = pygame.key.get_pressed()
-            # calculate wheel speeds
-            wheel_speeds = (0.0, 0.0)
-            # up arrow key
-            if keys[pygame.K_UP]:
-                print("up arrow key")
-                wheel_speeds = add_speed(wheel_speeds, go_forward)
-            # down arrow key
-            if keys[pygame.K_DOWN]:
-                print("down arrow key")
-                wheel_speeds = add_speed(wheel_speeds, go_backward)
-            # left arrow key
-            if keys[pygame.K_LEFT]:
-                print("left arrow key")
-                wheel_speeds = add_speed(wheel_speeds, turn_left)
-            # right arrow key
-            if keys[pygame.K_RIGHT]:
-                print("right arrow key")
-                wheel_speeds = add_speed(wheel_speeds, turn_right)
-            
-            # send wheel speeds to cozmo
-            robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1])
-            print("sending speeds {} and {}".format(wheel_speeds[0], wheel_speeds[1]))
-
-    robot.stop_all_motors()
-    pygame.quit()
+        robot.stop_all_motors()
+        pygame.quit()
 
 
 def collect_data(robot: cozmo.robot.Robot):
@@ -133,18 +135,8 @@ def collect_data(robot: cozmo.robot.Robot):
         os.chdir("{}/data/{}".format(absolute_path, folder_name))
         if verbose:
             print("Saving data in {} mode".format(mode))
+        write_data(robot, append=True if append_to else False, verbose=verbose)
         
-        try:
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
-            finished = False
-            executor.submit(write_data, robot, append=True if append_to else False, verbose=verbose)
-            executor.submit(drive_cozmo, robot)
-            while not finished:
-                time.sleep(1)
-        except (KeyboardInterrupt, SystemExit):
-            finished = True
-        finally:
-            executor.shutdown(wait=True)
         print("Data saved to {}".format(os.getcwd()))
 
     except NotADirectoryError:
