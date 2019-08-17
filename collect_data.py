@@ -21,6 +21,7 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
             keys = pygame.key.get_pressed()
             # get wheel keys
             wheels["up"] = keys[pygame.K_UP]
+            # print(wheels["up"])
             wheels["down"] = keys[pygame.K_DOWN]
             wheels["left"] = keys[pygame.K_LEFT]
             wheels["right"] = keys[pygame.K_RIGHT]
@@ -55,7 +56,7 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
                 head_speed += tilt_down
             
             # send wheel speeds to cozmo
-            robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1])
+            robot.drive_wheel_motors(wheel_speeds[0], wheel_speeds[1], l_wheel_acc=500, r_wheel_acc=500)
             # send head speed
             robot.move_head(head_speed)
         return wheels, head, stop
@@ -67,8 +68,8 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
     # (left wheel speed, right wheel speed)
     go_forward = (100, 100)
     go_backward = (-100, -100)
-    turn_left = (-50, 50)
-    turn_right = (50, -50)
+    turn_left = (-40, 40)
+    turn_right = (40, -40)
     # head speeds in radians per second
     tilt_up = 0.3
     tilt_down = -0.3
