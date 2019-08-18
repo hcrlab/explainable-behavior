@@ -21,7 +21,6 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
             keys = pygame.key.get_pressed()
             # get wheel keys
             wheels["up"] = keys[pygame.K_UP]
-            # print(wheels["up"])
             wheels["down"] = keys[pygame.K_DOWN]
             wheels["left"] = keys[pygame.K_LEFT]
             wheels["right"] = keys[pygame.K_RIGHT]
@@ -92,7 +91,7 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
                 start_from = max(img_list) + 1
         begin, end = start_from, start_from # we use these to calculate how many new data points are added
 
-    print("Press Control-C to stop")
+    print("Press [space] to stop")
     try:
         if not no_save:
             with open("data.csv", "a" if append else "x") as file:
@@ -127,6 +126,8 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
                             writer.writerow(row)
                             # update count
                             end += 1
+                        if stop:
+                            raise KeyboardInterrupt()
 
                         # end timer
                         end_time = time.time()
@@ -140,6 +141,8 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
                 start_time = time.time()
                 # drive cozmo
                 wheels, head, stop = drive(robot, wheels, head, stop)
+                if stop:
+                    raise KeyboardInterrupt()
                 # end timer
                 end_time = time.time()
                 # calculate how long to sleep to mantain desired frequency (default 10 Hz)
@@ -226,6 +229,4 @@ def main(robot: cozmo.robot.Robot):
 
 
 if __name__ == "__main__":
-    # don't need cozmo to drive off the charger
-    cozmo.robot.Robot.drive_off_charger_on_connect = False
     cozmo.run_program(main)
