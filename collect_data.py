@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# TODO: why doesn't head angle always set properly?
 import concurrent.futures
 import cozmo
 import csv
