@@ -71,6 +71,8 @@ def main():
                     if len(labels) == 0:
                         labels = ["none"]
                 label = ' '.join(labels)
+                if label == "forward left":
+                    print(label)
                 # rename corresponding image & copy to proper folder
                 # example new file name: NE4 1.jpg
                 if verbose:

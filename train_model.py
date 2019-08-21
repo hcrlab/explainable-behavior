@@ -2,13 +2,42 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import tensorflow as tf
 from tensorflow import keras
+from sklearn import datasets, model_selection
 import numpy as np
 import matplotlib.pyplot as plt
-import pathlib
+from glob import glob
+import cv2
 
 
 #%%
-data_root = pathlib.Path("./data/")
+# get paths of all images
+all_images = [filename for filename in glob('data/categorized/**/*.jpg')]
+image_count = len(all_images)
+image_count
+
+#%%
+# get shape of each image by checking shape of any image
+image_shape = cv2.imread(all_images[0], 0).shape # 0 for greyscale, 1 for color
+image_shape
+
+#%%
+# images is a vector (3D np array) containing all images, training & test
+images = np.empty((image_shape[0], image_shape[1], image_count))
+# vector of all labels
+labels = np.empty(image_count, dtype=object)
+
+#%%
+for i in range(image_count):
+    image = all_images[i]
+    # assign label for this example
+    labels[i] = image.split('/')[-2]
+    # convert image to numpy array
+    image_arr = cv2.imread(image, 0)
+    # insert image into array of all images
+    images[:,:,i] = image_arr
+
+#%%
+model_selection.train_test_split(data)
 #%%
 fashion_mnist = keras.datasets.fashion_mnist
 
