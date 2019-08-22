@@ -24,16 +24,15 @@ image_count
 
 #%%
 # get shape of each image by checking shape of any image (downsampling 2x)
-test_image = cv2.imread(all_images[0], 0) # 0 for greyscale, 1 for color
-dims = (test_image.shape[1]//4, test_image.shape[0]//4)
+test_image = cv2.imread(all_images[0])
+dims = (test_image.shape[1]//4, test_image.shape[0]//4) # (width, height)
 test_image = cv2.resize(test_image, dims)
-# test_image = cv2.pyrDown(cv2.pyrDown(test_image))
 image_shape = test_image.shape
 image_shape
 
 #%%
-# images is a vector (3D np array) containing all images, training & test
-images = np.empty((image_count, image_shape[0], image_shape[1]))
+# images is a vector (4D np array) containing all images, training & test
+images = np.empty((image_count, image_shape[0], image_shape[1], 3))
 # vector of all labels
 labels = np.empty(image_count, dtype=np.int8)
 labels_dict = {
@@ -61,13 +60,13 @@ for i in range(image_count):
     # assign label for this example
     label = image.split('/')[-2]
     labels[i] = labels_dict[label]
-    # convert image to numpy array
-    image_arr = cv2.imread(image, 0)
+    # convert (RGB) image to numpy array
+    # though cozmo's camera gives greyscale images, lime_image requires RGB
+    image_arr = cv2.imread(image)
     # resize down
-    # image_arr = cv2.pyrDown(cv2.pyrDown(image_arr))
     image_arr = cv2.resize(image_arr, dims)
     # insert image into array of all images
-    images[i,:,:] = image_arr
+    images[i,:,:,:] = image_arr
 
 #%%
 # 60% train, 20% validation, 20% test
@@ -105,6 +104,7 @@ plt.show()
 #%%
 # construct model
 model = keras.Sequential([
+    keras.layers.Lambda(lambda i: tf.image.rgb_to_grayscale(i)), # convert to greyscale
     keras.layers.Flatten(input_shape=(dims[1], dims[0])),
     keras.layers.Dense(784, activation=tf.nn.relu),
     keras.layers.Dense(128, activation=tf.nn.relu),
@@ -149,7 +149,8 @@ def plot_image(i, predictions_array, true_label, img):
     plt.xticks([])
     plt.yticks([])
 
-    plt.imshow(img, cmap=plt.cm.binary)
+    # plt.imshow(img, cmap=plt.cm.binary)
+    plt.imshow(img, cmap=plt.cm.gray)
 
     predicted_label = np.argmax(predictions_array)
     if predicted_label == true_label:
@@ -204,7 +205,7 @@ plot_value_array(i, predictions, test_labels)
 plt.show()
 
 #%%
-# investigate first 13 images
+# investigate first 15 images
 num_rows = 5
 num_cols = 3
 num_images = num_rows*num_cols
@@ -215,5 +216,26 @@ for i in range(num_images):
     plt.subplot(num_rows, 2*num_cols, 2*i+2)
     plot_value_array(i, predictions, test_labels)
 plt.show()
+
+#%%
+import lime
+from lime import lime_image
+
+#%%
+len(test_images[0].shape)
+
+#%%
+explainer = lime_image.LimeImageExplainer()
+explanation = explainer.explain_instance(test_images[2], model.predict, top_labels=3,
+    hide_color=0, num_samples=1000, batch_size=1)
+
+#%%
+from skimage.segmentation import mark_boundaries
+
+#%%
+temp, mask = explanation.get_image_and_mask(explanation.top_labels[1],
+    positive_only=False, num_features=5, hide_rest=False)
+plt.imshow(mark_boundaries(temp, mask))
+
 
 #%%
