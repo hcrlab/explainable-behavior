@@ -10,45 +10,85 @@ import cv2
 
 
 #%%
+include_none = False
+
+#%%
 # get paths of all images
-all_images = [filename for filename in glob('data/categorized/**/*.jpg')]
+if include_none:
+    all_images = [filename for filename in glob('data/categorized/**/*.jpg')]
+else:
+    all_images = [filename for filename in glob('data/categorized/**/*.jpg')
+        if filename.split('/')[-2] != 'none']
 image_count = len(all_images)
 image_count
 
 #%%
-# get shape of each image by checking shape of any image
-image_shape = cv2.imread(all_images[0], 0).shape # 0 for greyscale, 1 for color
+# get shape of each image by checking shape of any image (downsampling 2x)
+test_image = cv2.imread(all_images[0], 0) # 0 for greyscale, 1 for color
+dims = (test_image.shape[1]//4, test_image.shape[0]//4)
+test_image = cv2.resize(test_image, dims)
+# test_image = cv2.pyrDown(cv2.pyrDown(test_image))
+image_shape = test_image.shape
 image_shape
 
 #%%
 # images is a vector (3D np array) containing all images, training & test
-images = np.empty((image_shape[0], image_shape[1], image_count))
+images = np.empty((image_count, image_shape[0], image_shape[1]))
 # vector of all labels
-labels = np.empty(image_count, dtype=object)
+labels = np.empty(image_count, dtype=np.int8)
+labels_dict = {
+    "stop": 0,
+    "forward": 1,
+    "forward left": 2,
+    "forward right": 3,
+    "backward": 4,
+    "backward left": 5,
+    "backward right": 6,
+    "left": 7,
+    "right": 8
+}
+if include_none:
+    labels_dict["none"] = 9
+
+labels_list = ["stop", "forward", "forward left", "forward right",
+    "backward", "backward left", "backward right", "left", "right"]
+if include_none:
+    labels_list.append("none")
 
 #%%
 for i in range(image_count):
     image = all_images[i]
     # assign label for this example
-    labels[i] = image.split('/')[-2]
+    label = image.split('/')[-2]
+    labels[i] = labels_dict[label]
     # convert image to numpy array
     image_arr = cv2.imread(image, 0)
+    # resize down
+    # image_arr = cv2.pyrDown(cv2.pyrDown(image_arr))
+    image_arr = cv2.resize(image_arr, dims)
     # insert image into array of all images
-    images[:,:,i] = image_arr
+    images[i,:,:] = image_arr
 
 #%%
-model_selection.train_test_split(data)
+# 60% train, 20% validation, 20% test
+train_images, test_images, train_labels, test_labels = model_selection.train_test_split(
+    images, labels, test_size=0.2)
+train_images, val_images, train_labels, val_labels = model_selection.train_test_split(
+    train_images, train_labels, test_size=0.25)
+
 #%%
-fashion_mnist = keras.datasets.fashion_mnist
+# visualize an image
+plt.figure()
+plt.imshow(train_images[0])
+plt.colorbar()
+plt.grid(False)
+plt.show()
 
-(train_images, train_labels), (test_images, test_labels) = fashion_mnist.load_data()
-
-class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
-               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
-
+#%%
+# rescale images to work with this particular NN model
 train_images = train_images / 255.0
 test_images = test_images / 255.0
-
+ 
 #%%
 # show first 25 images
 plt.figure(figsize=(10, 10))
@@ -57,17 +97,20 @@ for i in range(25):
     plt.xticks([])
     plt.yticks([])
     plt.grid(False)
-    plt.imshow(train_images[i], cmap=plt.cm.binary)
-    plt.xlabel(class_names[train_labels[i]])
+    # plt.imshow(train_images[i], cmap=plt.cm.binary)
+    plt.imshow(train_images[i], cmap=plt.cm.gray)
+    plt.xlabel(train_labels[i])
 plt.show()
 
 #%%
 # construct model
 model = keras.Sequential([
-    keras.layers.Flatten(input_shape=(28, 28)),
+    keras.layers.Flatten(input_shape=(dims[1], dims[0])),
+    keras.layers.Dense(784, activation=tf.nn.relu),
     keras.layers.Dense(128, activation=tf.nn.relu),
-    keras.layers.Dense(10, activation=tf.nn.softmax)
+    keras.layers.Dense(len(labels_list), activation=tf.nn.softmax)
 ])
+
 #%%
 # compile model
 model.compile(optimizer='adam',
@@ -77,7 +120,12 @@ model.compile(optimizer='adam',
 # train model
 model.fit(train_images, train_labels, epochs=5)
 #%%
-# evaluate accuracy
+# evaluate validation accuracy
+val_loss, val_acc = model.evaluate(val_images, val_labels)
+print('Validation accuracy:', val_acc)
+
+#%%
+# evaluate test accuracy
 test_loss, test_acc = model.evaluate(test_images, test_labels)
 print('Test accuracy:', test_acc)
 
@@ -109,9 +157,9 @@ def plot_image(i, predictions_array, true_label, img):
     else:
         color = 'red'
 
-    plt.xlabel("{} {:2.0f}% ({})".format(class_names[predicted_label],
+    plt.xlabel("{} {:2.0f}% ({})".format(labels_list[predicted_label],
                                 100*np.max(predictions_array),
-                                class_names[true_label]),
+                                labels_list[true_label]),
                                 color=color)
 
 def plot_value_array(i, predictions_array, true_label):
@@ -121,8 +169,8 @@ def plot_value_array(i, predictions_array, true_label):
     plt.grid(False)
     plt.xticks([])
     plt.yticks([])
-    # plot probability for each of the 10 classes in grey
-    thisplot = plt.bar(range(10), predictions_array, color="#777777")
+    # plot probability for each of the classes in grey
+    thisplot = plt.bar(range(len(labels_list)), predictions_array, color="#777777")
     # sets y-limits to (0, 1) (not sure why this is necessary)
     plt.ylim([0, 1])
     # select the label predicted by model
