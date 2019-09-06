@@ -2,11 +2,17 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import tensorflow as tf
 from tensorflow import keras
-from sklearn import datasets, model_selection
+from sklearn import datasets, metrics, model_selection
 import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
+
 import cv2
+from skimage.segmentation import mark_boundaries
+import lime
+from lime import lime_image
+from skimage.color import label2rgb
+from lime.wrappers.scikit_image import SegmentationAlgorithm
 
 
 #%%
@@ -24,10 +30,10 @@ image_count
 
 #%%
 # get shape of each image by checking shape of any image (downsampling 2x)
-test_image = cv2.imread(all_images[0])
-dims = (test_image.shape[1]//4, test_image.shape[0]//4) # (width, height)
-test_image = cv2.resize(test_image, dims)
-image_shape = test_image.shape
+check_image = cv2.imread(all_images[0])
+dims = (check_image.shape[1]//4, check_image.shape[0]//4) # (width, height)
+check_image = cv2.resize(check_image, dims)
+image_shape = check_image.shape
 image_shape
 
 #%%
@@ -134,6 +140,17 @@ print('Test accuracy:', test_acc)
 predictions = model.predict(test_images)
 
 #%%
+# get top prediction for calculating precision/recall
+top_predictions = np.argmax(predictions, axis=1)
+
+#%%
+# classification report
+# we only want target names for the labels present in the test set
+# e.g. backwards left and right aren't in test set (or training/val)
+print(metrics.classification_report(test_labels, top_predictions,
+    target_names = [labels_list[i] for i in np.unique(test_labels)]))
+
+#%%
 # view a prediction
 np.argmax(predictions[0]) # argmax to select label w/ highest prob
 
@@ -143,7 +160,7 @@ test_labels[0]
 
 #%%
 # plotting functions
-def plot_image(i, predictions_array, true_label, img):
+def plot_image(i, predictions_array, true_label, img, save=False):
     predictions_array, true_label, img = predictions_array[i], true_label[i], img[i]
     plt.grid(False)
     plt.xticks([])
@@ -162,6 +179,9 @@ def plot_image(i, predictions_array, true_label, img):
                                 100*np.max(predictions_array),
                                 labels_list[true_label]),
                                 color=color)
+    
+    if save:
+        plt.savefig(i)
 
 def plot_value_array(i, predictions_array, true_label):
     # selects the array of predicted probabilities & labels for the desired
@@ -185,7 +205,7 @@ def plot_value_array(i, predictions_array, true_label):
 
 #%%
 # investigate 0th image
-i = 0
+i = 1
 plt.figure(figsize=(6,3))
 plt.subplot(1,2,1)
 plot_image(i, predictions, test_labels, test_images)
@@ -218,24 +238,97 @@ for i in range(num_images):
 plt.show()
 
 #%%
-import lime
-from lime import lime_image
+explainer = lime_image.LimeImageExplainer(verbose=False)
+segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
 
 #%%
-len(test_images[0].shape)
+num_top_labels=4
+explanation = explainer.explain_instance(test_images[0], classifier_fn=model.predict,
+    top_labels=num_top_labels, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
+
+#%%
+temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=True,
+    num_features=5, hide_rest=False)
+fig, (ax1, ax2) = plt.subplots(1,2, figsize=(8, 4))
+ax1.imshow(label2rgb(mask, temp, bg_label=0), interpolation='nearest')
+ax1.set_title('Positive Regions for {}'.format(labels_list[test_labels[0]]))
+temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=False,
+    num_features=10, hide_rest=False)
+ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
+ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
+
+#%%
+fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+    temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+        hide_rest=False, min_weight=0.01)
+    c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+    c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
+    c_ax.axis('off')
+    action_id = np.random.choice(np.where(train_labels==i)[0])
+    gt_ax.imshow(train_images[action_id])
+    gt_ax.set_title('Example of {}'.format(labels_list[i]))
+    gt_ax.axis('off')
+
+#%%
+# generate several explanation summary images
+# explanations for correct predictions
+for i in np.unique(test_labels):
+    print("Generating explanations for correctly classified {} actions...".format(labels_list[i]))
+    # create necessary folders
+    while True:
+        try:
+            os.chdir('model/explanations/{}/correct/'.format(labels_list[i]))
+            break
+        except FileNotFoundError:
+            os.makedirs('model/explanations/{}/correct/'.format(labels_list[i]))
+
+    i_locations = np.where(test_labels == i)[0]
+    # randomly pick 10 images; if there are fewer than ten to choose from just
+    # pick them all
+    selection = np.random.choice(i_locations, 10) if len(i_locations) > 10 else i_locations
+    i_labels = test_labels[selection]
+    i_predictions = top_predictions[selection]
+    # generate explanation summary image for each selected image
+    for j in range(selection.shape[0]):
+        # create explanation
+        num_top_labels = 4
+        explanation = explainer.explain_instance(test_images[selection[j]], classifier_fn=model.predict,
+            top_labels=num_top_labels, hide_color=0, num_samples=1000, segmentation_fn=segmenter)
+
+        # create figure
+        fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+        for k, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+            temp, mask = explanation.get_image_and_mask(k, positive_only=True, num_features=5,
+                hide_rest=False, min_weight=0.01)
+            c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+            c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[k], 100*predictions[selection[j], k]))
+            c_ax.axis('off')
+            action_id = np.random.choice(np.where(train_labels==k)[0])
+            gt_ax.imshow(train_images[action_id])
+            gt_ax.set_title('Example of {}'.format(labels_list[k]))
+            gt_ax.axis('off')
+        
+        plt.savefig("{}.jpg".format(selection[j]))
+
+os.chdir('../../../..')
+
 
 #%%
 explainer = lime_image.LimeImageExplainer()
-explanation = explainer.explain_instance(test_images[2], model.predict, top_labels=3,
-    hide_color=0, num_samples=1000, batch_size=1)
+explanation = explainer.explain_instance(test_images[1], model.predict,
+    top_labels=3, hide_color=0, num_samples=1000, batch_size=1)
 
 #%%
-from skimage.segmentation import mark_boundaries
-
-#%%
-temp, mask = explanation.get_image_and_mask(explanation.top_labels[1],
-    positive_only=False, num_features=5, hide_rest=False)
+temp, mask = explanation.get_image_and_mask(explanation.top_labels[0],
+    positive_only=False, num_features=5, hide_rest=False, min_weight=0.1)
 plt.imshow(mark_boundaries(temp, mask))
 
 
 #%%
+# save lime predictions for first 15 images
+explainer = lime_image.LimeImageExplainer()
+for i in range(15):
+    explanation  = explainer.explain_instance(test_images[i], model.predict, top_labels=3,
+    hide_color=0, num_samples=1000, batch_size=1)
+
