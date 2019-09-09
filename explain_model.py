@@ -1,13 +1,9 @@
 #%%
 from __future__ import absolute_import, division, print_function, unicode_literals
-import tensorflow as tf
 from tensorflow import keras
-from sklearn import datasets, metrics, model_selection
 import numpy as np
 import matplotlib.pyplot as plt
-from glob import glob
 import os
-import cv2
 from skimage.segmentation import mark_boundaries
 import lime
 from lime import lime_image
@@ -20,8 +16,18 @@ import pickle
 model = keras.models.load_model("model/cozmo_drive_model.h5")
 
 #%% load data
-with open("model/train_val_test.pkl", 'rb') as file:
+with open("model/pickles/train_val_test.pkl", 'rb') as file:
     train_images, val_images, test_images, train_labels, val_labels, test_labels = pickle.load(file)
+
+#%%
+# load label names
+with open("model/pickles/label_names.pkl", 'rb') as file:
+    labels_dict, labels_list = pickle.load(file)
+
+#%%
+# load top predictions
+with open("model/pickles/predictions.pkl", 'rb') as file:
+    predictions, top_predictions = pickle.load(file)
 
 #%%
 explainer = lime_image.LimeImageExplainer(verbose=False)
@@ -171,3 +177,6 @@ for i in range(15):
     hide_color=0, num_samples=1000, batch_size=1)
 
 
+
+
+#%%

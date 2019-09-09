@@ -1,27 +1,25 @@
 #%%
 from __future__ import absolute_import, division, print_function, unicode_literals
-import tensorflow as tf
 from tensorflow import keras
-from sklearn import datasets, metrics, model_selection
+from sklearn import metrics
 import numpy as np
 import matplotlib.pyplot as plt
-from glob import glob
-import os
-import cv2
-from skimage.segmentation import mark_boundaries
-import lime
-from lime import lime_image
-from skimage.color import label2rgb
-from lime.wrappers.scikit_image import SegmentationAlgorithm
 import pickle
 
 
-#%% load model
+#%%
+# load model
 model = keras.models.load_model("model/cozmo_drive_model.h5")
 
-#%% load data
-with open("model/train_val_test.pkl", 'rb') as file:
+#%%
+# load data
+with open("model/pickles/train_val_test.pkl", 'rb') as file:
     train_images, val_images, test_images, train_labels, val_labels, test_labels = pickle.load(file)
+    
+#%%
+# load label names
+with open("model/pickles/label_names.pkl", 'rb') as file:
+    labels_dict, labels_list = pickle.load(file)
 
 #%%
 # make predictions
@@ -30,6 +28,11 @@ predictions = model.predict(test_images)
 #%%
 # get top prediction for calculating precision/recall
 top_predictions = np.argmax(predictions, axis=1)
+
+#%%
+# save predictions
+with open("model/pickles/predictions.pkl", 'wb') as file:
+    pickle.dump([predictions, top_predictions], file)
 
 #%%
 # classification report

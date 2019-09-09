@@ -2,17 +2,11 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import tensorflow as tf
 from tensorflow import keras
-from sklearn import datasets, metrics, model_selection
+from sklearn import model_selection
 import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
-import os
 import cv2
-from skimage.segmentation import mark_boundaries
-import lime
-from lime import lime_image
-from skimage.color import label2rgb
-from lime.wrappers.scikit_image import SegmentationAlgorithm
 import pickle
 
 
@@ -135,8 +129,14 @@ model.save("model/cozmo_drive_model.h5")
 # save train/val/test data for use in later analysis
 data = [train_images, val_images, test_images, train_labels, val_labels,
     test_labels]
-with open("model/train_val_test.pkl", 'wb') as file:
+with open("model/pickles/train_val_test.pkl", 'wb') as file:
     pickle.dump(data, file)
+
+#%%
+# save labels
+label_name_structs = [labels_dict, labels_list]
+with open("model/pickles/label_names.pkl", 'wb') as file:
+    pickle.dump(label_name_structs, file)
 
 #%%
 # evaluate validation accuracy
