@@ -2,6 +2,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from tensorflow import keras
 import numpy as np
+import scipy.stats as stats
 import matplotlib.pyplot as plt
 import os
 from skimage.segmentation import mark_boundaries
@@ -11,6 +12,9 @@ from skimage.color import label2rgb
 from lime.wrappers.scikit_image import SegmentationAlgorithm
 import pickle
 
+
+#%%
+os.chdir("/home/hcrlab/cozmo/explainability/")
 
 #%% load model
 model = keras.models.load_model("model/cozmo_drive_model.h5")
@@ -85,6 +89,9 @@ for i in np.unique(test_labels):
     selection = np.random.choice(i_locations, 10) if len(i_locations) > 10 else i_locations
     i_labels = test_labels[selection]
     i_predictions = top_predictions[selection]
+    # create mask array
+    mask_array = np.empty([selection.shape[0], 60, 80])
+
     # generate explanation summary image for each selected image
     for j in range(selection.shape[0]):
         # create explanation
@@ -94,19 +101,33 @@ for i in np.unique(test_labels):
 
         # create figure
         fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+        first_loop = True # for saving mask only for the correct prediction
         for k, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
             temp, mask = explanation.get_image_and_mask(k, positive_only=True, num_features=5,
                 hide_rest=False, min_weight=0.01)
-            c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+            if first_loop:
+                mask_array[j] = mask
+            c_ax.imshow(label2rgb(mask, temp, bg_label=0), interpolation='nearest')
             c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[k], 100*predictions[selection[j], k]))
             c_ax.axis('off')
             action_id = np.random.choice(np.where(train_labels==k)[0])
             gt_ax.imshow(train_images[action_id])
             gt_ax.set_title('Example of {}'.format(labels_list[k]))
             gt_ax.axis('off')
-        
+            first_loop = False
+
         plt.savefig("{}.jpg".format(selection[j]))
         plt.close(fig)
+
+    # save average explanation
+    if selection.shape[0] > 0:
+        fig, ax = plt.subplots()
+        average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
+        ax.imshow(label2rgb(average_explanation, bg_label=0), interpolation='nearest')
+        ax.set_title("Average explanation")
+        plt.savefig("../average_explanation.jpg")
+        plt.close(fig)
+
     os.chdir('../../../..')
 print("done")
 
@@ -175,8 +196,6 @@ explainer = lime_image.LimeImageExplainer()
 for i in range(15):
     explanation  = explainer.explain_instance(test_images[i], model.predict, top_labels=3,
     hide_color=0, num_samples=1000, batch_size=1)
-
-
 
 
 #%%
