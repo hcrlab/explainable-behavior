@@ -9,11 +9,23 @@ from argparse import ArgumentParser
 from cozmo.util import degrees
 from datetime import datetime
 
+# globals (imported in drive.py)
+# wheel speeds in millimiters per second
+# (left wheel speed, right wheel speed)
+go_forward = (100, 100)
+go_backward = (-100, -100)
+turn_left = (-40, 40)
+turn_right = (40, -40)
+# head speeds in radians per second
+tilt_up = 0.3
+tilt_down = -0.3
 
-def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_save=False, verbose=False):
-    def add_speed(wheel_speeds: tuple, addition: tuple):
-        return (wheel_speeds[0] + addition[0], wheel_speeds[1] + addition[1])
+
+
+def add_speed(wheel_speeds: tuple, addition: tuple):
+    return (wheel_speeds[0] + addition[0], wheel_speeds[1] + addition[1])
     
+def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_save=False, verbose=False):
     def drive(robot: cozmo.robot.Robot, wheels, head, stop):
         event = pygame.event.poll()
         if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
@@ -62,15 +74,6 @@ def collect_data(robot: cozmo.robot.Robot, frequency = 10.0, append=False, no_sa
     pygame.init()
     screen = pygame.display.set_mode((100,100))
     
-    # wheel speeds in millimiters per second
-    # (left wheel speed, right wheel speed)
-    go_forward = (100, 100)
-    go_backward = (-100, -100)
-    turn_left = (-40, 40)
-    turn_right = (40, -40)
-    # head speeds in radians per second
-    tilt_up = 0.3
-    tilt_down = -0.3
     # other variables we need later
     period = 1/frequency # default: 0.1 sec
     wheels = {"up": 0, "down": 0, "left": 0, "right": 0}
