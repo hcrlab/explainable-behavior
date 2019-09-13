@@ -179,6 +179,48 @@ for i in np.unique(test_labels):
     os.chdir('../../../..')
 print("done")
 
+#%%
+# generate average explanations
+for i in np.unique(test_labels):
+    print("Generating average explanation for {} actions...".format(labels_list[i]))
+    # ensure we're in correct folder
+    assert os.getcwd().split('/')[-1] == 'explainability' 
+    # create necessary folders
+    while True:
+        try:
+            os.chdir('model/explanations/{}/'.format(labels_list[i]))
+            break
+        except FileNotFoundError:
+            os.makedirs('model/explanations/{}/'.format(labels_list[i]))
+
+    i_locations = np.where(top_predictions == i)[0]
+    # randomly pick 10 images; if there are fewer than ten to choose from just
+    # pick them all
+    selection = np.random.choice(i_locations, 10) if len(i_locations) > 10 else i_locations
+    # create mask array
+    mask_array = np.empty([selection.shape[0], 60, 80])
+
+    # generate explanation summary image for each selected image
+    for j in range(selection.shape[0]):
+        # create explanation
+        num_top_labels = 4
+        explanation = explainer.explain_instance(test_images[selection[j]], classifier_fn=model.predict,
+            top_labels=num_top_labels, hide_color=0, num_samples=1000, segmentation_fn=segmenter)
+        temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+            hide_rest=False, min_weight=0.01)
+        mask_array[j] = mask
+
+    # save average explanation
+    if selection.shape[0] > 0:
+        fig, ax = plt.subplots()
+        average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
+        ax.imshow(label2rgb(average_explanation, bg_label=0), interpolation='nearest')
+        ax.set_title("Average explanation")
+        plt.savefig("average_explanation.jpg")
+        plt.close(fig)
+
+    os.chdir('../../../')
+print("done")
 
 #%%
 explainer = lime_image.LimeImageExplainer()
