@@ -1,0 +1,59 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File (integrated terminal)",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File (external terminal)",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "externalTerminal"
+        },
+        {
+            "name": "collect data (save)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/collect_data.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "collect data (don't save)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/collect_data.py",
+            "console": "integratedTerminal",
+            "args": ["--no_save"]
+        },
+        {
+            "name": "categorize data",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/categorize.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "categorize data (verbose)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/categorize.py",
+            "console": "integratedTerminal",
+            "args": ["--verbose"]
+        },
+        {
+            "name": "drive cozmo",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/drive.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
