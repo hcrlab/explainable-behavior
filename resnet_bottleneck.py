@@ -1,9 +1,10 @@
 import numpy as np
+import tensorflow as tf
 import cv2
 import pickle
 from glob import glob
 from sklearn import model_selection
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import Dropout, Flatten, Dense
 from keras import applications
 
@@ -89,33 +90,83 @@ def train_top_model(train_labels, val_labels, labels_list,
     val_data = np.load(
         open("pretrained/resnet/bottleneck_features_val.npy", "rb"))
 
-    model = Sequential()
-    model.add(Flatten(input_shape=train_data.shape[1:]))
-    model.add(Dense(256, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(len(labels_list), activation='sigmoid'))
+    # model = Sequential()
+    # model.add(Flatten(input_shape=train_data.shape[1:]))
+    # model.add(Dense(256, activation='relu'))
+    # model.add(Dropout(0.5))
+    # model.add(Dense(len(labels_list), activation='softmax'))
 
-    model.compile(optimizer='rmsprop',
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy'])
+    # model.compile(optimizer='rmsprop',
+    #     loss='sparse_categorical_crossentropy',
+    #     metrics=['accuracy'])
+        
+    # construct model
+    model = Sequential([
+        # Lambda(lambda i: tf.image.rgb_to_grayscale(i)), # convert to greyscale
+        # Flatten(input_shape=(dims[1], dims[0])),
+        Flatten(input_shape=train_data.shape[1:]),
+        Dense(784, activation=tf.nn.relu),
+        Dense(128, activation=tf.nn.relu),
+        Dense(len(labels_list), activation=tf.nn.softmax)
+        # Dense(784, activation='relu'),
+        # Dense(128, activation='relu'),
+        # Dense(len(labels_list), activation='softmax')
+    ])
+
+    # compile model
+    model.compile(optimizer='adam',
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
 
     model.fit(train_data, train_labels, epochs=epochs,
         validation_data=(val_data, val_labels))
     
-    model.save_weights(top_model_weights_path)
+    model.save(top_model_weights_path)
+    return model
 
 
-def main():
-    train_images, val_images, test_images,\
-        train_labels, val_labels, test_labels = load_data()
+def test_top_model(test_images, test_labels,
+    top_model_weights_path="pretrained/resnet/bottleneck.h5"):
+
+    resnet = applications.ResNet50(include_top=False, weights='imagenet')
+    bottleneck_features_test = resnet.predict(test_images)
+    top_model = load_model(top_model_weights_path)
+    _, test_acc = \
+        top_model.evaluate(bottleneck_features_test, test_labels)
+    print("Test accuracy:", test_acc)
+
+
+def main(resplit=True, retrain=True):
+    # set resplit to true to re-split train/val/test data, false to use existing
+    # train/val/test split
+    if resplit:
+        train_images, val_images, test_images,\
+            train_labels, val_labels, test_labels = load_data()
+    
+        # save data for future use
+        data = [train_images, val_images, test_images, train_labels,
+            val_labels, test_labels]
+        with open("pretrained/resnet/train_val_test.pkl", 'wb') as file:
+            pickle.dump(data, file)
+    else:
+        with open("pretrained/resnet/train_val_test.pkl", 'rb') as file:
+            train_images, val_images, test_images,\
+                train_labels, val_labels, test_labels = pickle.load(file)
     
     with open("model/pickles/label_names.pkl", 'rb') as file:
         _, labels_list = pickle.load(file)
 
-    # evaluate bottleneck
-    # save_bottleneck_features(train_images, val_images)
-    train_top_model(train_labels, val_labels, labels_list)
+    if retrain:
+        # make sure to delete existing bottleneck feature files...
+        save_bottleneck_features(train_images, val_images)
+        train_top_model(train_labels, val_labels, labels_list, epochs=15)
+    # else:
+    #     load_model("pretrained/resnet/bottleneck.h5")
+
+    # evaluate bottleneck model
+    test_top_model(test_images, test_labels)
 
 
 if __name__ == "__main__":
+    # main(False, False)
     main()
