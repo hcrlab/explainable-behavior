@@ -3,3 +3,4 @@ data/categorized
 __pycache__/
 *.h5
 *.pkl
+*.npy
