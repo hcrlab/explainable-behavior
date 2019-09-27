@@ -7,6 +7,10 @@ from sklearn import model_selection
 from keras.models import Sequential, load_model
 from keras.layers import Dropout, Flatten, Dense
 from keras import applications
+import lime
+from lime import lime_image
+from skimage.color import label2rgb
+from lime.wrappers.scikit_image import SegmentationAlgorithm
 
 
 def load_data(include_none=False):
@@ -125,15 +129,58 @@ def train_top_model(train_labels, val_labels, labels_list,
     return model
 
 
-def test_top_model(test_images, test_labels,
-    top_model_weights_path="pretrained/resnet/bottleneck.h5"):
+def evaluate_top_model(test_images, test_labels,
+    top_model_weights_path="pretrained/resnet/bottleneck.h5", save_predictions=False):
 
     resnet = applications.ResNet50(include_top=False, weights='imagenet')
     bottleneck_features_test = resnet.predict(test_images)
     top_model = load_model(top_model_weights_path)
+    predictions = top_model.predict(bottleneck_features_test)
+    top_predictions = np.argmax(predictions, axis=1)
+    if save_predictions:
+        with open("pretrained/resnet/predictions.pkl", 'wb') as file:
+            pickle.dump([predictions, top_predictions], file)
     _, test_acc = \
         top_model.evaluate(bottleneck_features_test, test_labels)
     print("Test accuracy:", test_acc)
+
+
+def explain_top_model(test_images, test_labels,
+    top_model_weights_path="pretrained/resnet/bottleneck.h5"):
+
+    resnet = applications.ResNet50(include_top=False, weights='imagenet')
+    with open("pretrained/resnet/predictions.pkl", 'rb') as file:
+        predictions, top_predictions = pickle.load(file)
+
+    top_model = load_model(top_model_weights_path)
+
+    explainer = lime_image.LimeImageExplainer(verbose=False)
+    segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
+
+    num_top_labels=4
+    explanation = explainer.explain_instance(test_images[0], classifier_fn=top_model.predict,
+        top_labels=num_top_labels, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
+    temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=True,
+        num_features=5, hide_rest=False)
+    fig, (ax1, ax2) = plt.subplots(1,2, figsize=(8, 4))
+    ax1.imshow(label2rgb(mask, temp, bg_label=0), interpolation='nearest')
+    ax1.set_title('Positive Regions for {}'.format(labels_list[test_labels[0]]))
+    temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=False,
+        num_features=10, hide_rest=False)
+    ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
+    ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
+
+    fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+    for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+        temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+            hide_rest=False, min_weight=0.01)
+        c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+        c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
+        c_ax.axis('off')
+        action_id = np.random.choice(np.where(train_labels==i)[0])
+        gt_ax.imshow(train_images[action_id])
+        gt_ax.set_title('Example of {}'.format(labels_list[i]))
+        gt_ax.axis('off')
 
 
 def main(resplit=True, retrain=True):
@@ -164,9 +211,10 @@ def main(resplit=True, retrain=True):
     #     load_model("pretrained/resnet/bottleneck.h5")
 
     # evaluate bottleneck model
-    test_top_model(test_images, test_labels)
+    # evaluate_top_model(test_images, test_labels, save_predictions=True)
+    explain_top_model(test_images, test_labels)
 
 
 if __name__ == "__main__":
-    # main(False, False)
-    main()
+    main(False, False)
+    # main()
