@@ -1,18 +1,24 @@
+#%%
 import numpy as np
 import tensorflow as tf
 import cv2
 import pickle
 from glob import glob
 from sklearn import model_selection
-from keras.models import Sequential, load_model
+# from tensorflow.keras.models import Sequential, Model, load_model
+# from tensorflow.keras.layers import Dropout, Flatten, Dense
+# from tensorflow.keras import applications
+from keras.models import Sequential, Model, load_model
 from keras.layers import Dropout, Flatten, Dense
 from keras import applications
 import lime
 from lime import lime_image
 from skimage.color import label2rgb
 from lime.wrappers.scikit_image import SegmentationAlgorithm
+import matplotlib.pyplot as plt
 
 
+#%%
 def load_data(include_none=False):
     # get paths of all images
     if include_none:
@@ -74,6 +80,7 @@ def load_data(include_none=False):
     return train_images, val_images, test_images, train_labels, val_labels, test_labels
 
 
+#%%
 def save_bottleneck_features(train_images, val_images):
     # sticking with resnet for now, could try resnetv2/resnext
     # TODO: does this need input_shape argument? https://keras.io/applications/#resnet
@@ -86,6 +93,7 @@ def save_bottleneck_features(train_images, val_images):
         bottleneck_features_val)
 
 
+#%%
 def train_top_model(train_labels, val_labels, labels_list,
     top_model_weights_path='pretrained/resnet/bottleneck.h5', epochs=50):
     
@@ -129,6 +137,7 @@ def train_top_model(train_labels, val_labels, labels_list,
     return model
 
 
+#%%
 def evaluate_top_model(test_images, test_labels,
     top_model_weights_path="pretrained/resnet/bottleneck.h5", save_predictions=False):
 
@@ -144,21 +153,40 @@ def evaluate_top_model(test_images, test_labels,
         top_model.evaluate(bottleneck_features_test, test_labels)
     print("Test accuracy:", test_acc)
 
-
-def explain_top_model(test_images, test_labels,
+#%%
+def explain_top_model(test_images, test_labels, labels_list,
     top_model_weights_path="pretrained/resnet/bottleneck.h5"):
 
-    resnet = applications.ResNet50(include_top=False, weights='imagenet')
-    with open("pretrained/resnet/predictions.pkl", 'rb') as file:
-        predictions, top_predictions = pickle.load(file)
+    # load ResNet
+    initial_model = applications.ResNet50(include_top=False, weights='imagenet', input_shape=test_images.shape[1:])
+    # get last layer
+    last = initial_model.output
 
-    top_model = load_model(top_model_weights_path)
+    # create top model
+    top_model = Sequential()
+    top_model.add(load_model(top_model_weights_path))
+
+    preds = top_model(last)
+    model = Model(initial_model.input, preds)
+
+    # # copy ResNet to a Sequential model
+    # new_model = Sequential()
+    # for layer in model.layers:
+    #     new_model.add(layer)
+
+    # # concatenate top model to ResNet
+    # new_model.add(top_model)
+
+    # compile model (probably don't need)
+    # model.compile(optimizer='adam',
+    #             loss='sparse_categorical_crossentropy',
+    #             metrics=['accuracy'])
 
     explainer = lime_image.LimeImageExplainer(verbose=False)
     segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
 
     num_top_labels=4
-    explanation = explainer.explain_instance(test_images[0], classifier_fn=top_model.predict,
+    explanation = explainer.explain_instance(test_images[0], classifier_fn=model.predict,
         top_labels=num_top_labels, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
     temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=True,
         num_features=5, hide_rest=False)
@@ -170,19 +198,22 @@ def explain_top_model(test_images, test_labels,
     ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
     ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
 
-    fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
-    for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
-        temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
-            hide_rest=False, min_weight=0.01)
-        c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
-        c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
-        c_ax.axis('off')
-        action_id = np.random.choice(np.where(train_labels==i)[0])
-        gt_ax.imshow(train_images[action_id])
-        gt_ax.set_title('Example of {}'.format(labels_list[i]))
-        gt_ax.axis('off')
+    # with open("pretrained/resnet/predictions.pkl", 'rb') as file:
+    #     predictions, top_predictions = pickle.load(file)
+    # fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+    # for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+    #     temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+    #         hide_rest=False, min_weight=0.01)
+    #     c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+    #     c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
+    #     c_ax.axis('off')
+    #     action_id = np.random.choice(np.where(train_labels==i)[0])
+    #     gt_ax.imshow(train_images[action_id])
+    #     gt_ax.set_title('Example of {}'.format(labels_list[i]))
+    #     gt_ax.axis('off')
 
 
+#%%
 def main(resplit=True, retrain=True):
     # set resplit to true to re-split train/val/test data, false to use existing
     # train/val/test split
@@ -211,10 +242,16 @@ def main(resplit=True, retrain=True):
     #     load_model("pretrained/resnet/bottleneck.h5")
 
     # evaluate bottleneck model
-    # evaluate_top_model(test_images, test_labels, save_predictions=True)
-    explain_top_model(test_images, test_labels)
+    evaluate_top_model(test_images, test_labels, save_predictions=True)
+    explain_top_model(test_images, test_labels, labels_list)
+
+#%%
+main(False, False)
 
 
-if __name__ == "__main__":
-    main(False, False)
-    # main()
+# if __name__ == "__main__":
+#     # main(True, True)
+#     main(False, False)
+
+
+#%%
