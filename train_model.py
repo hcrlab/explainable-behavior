@@ -87,6 +87,7 @@ plt.show()
 #%%
 # rescale images to work with this particular NN model
 train_images = train_images / 255.0
+val_images = val_images / 255.0
 test_images = test_images / 255.0
  
 #%%

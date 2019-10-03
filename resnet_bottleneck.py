@@ -77,6 +77,11 @@ def load_data(include_none=False):
     train_images, val_images, train_labels, val_labels = model_selection.train_test_split(
         train_images, train_labels, test_size=0.25)
 
+    # rescale images to [0, 1]
+    train_images = train_images / 255.0
+    val_images = val_images / 255.0
+    test_images = test_images / 255.0
+
     return train_images, val_images, test_images, train_labels, val_labels, test_labels
 
 
@@ -154,8 +159,8 @@ def evaluate_top_model(test_images, test_labels,
     print("Test accuracy:", test_acc)
 
 #%%
-def explain_top_model(test_images, test_labels, labels_list,
-    top_model_weights_path="pretrained/resnet/bottleneck.h5"):
+def explain_top_model(train_images, train_labels, test_images, test_labels,
+    labels_list, top_model_weights_path="pretrained/resnet/bottleneck.h5"):
 
     # load ResNet
     initial_model = applications.ResNet50(include_top=False, weights='imagenet', input_shape=test_images.shape[1:])
@@ -198,19 +203,20 @@ def explain_top_model(test_images, test_labels, labels_list,
     ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
     ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
 
-    # with open("pretrained/resnet/predictions.pkl", 'rb') as file:
-    #     predictions, top_predictions = pickle.load(file)
-    # fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
-    # for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
-    #     temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
-    #         hide_rest=False, min_weight=0.01)
-    #     c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
-    #     c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
-    #     c_ax.axis('off')
-    #     action_id = np.random.choice(np.where(train_labels==i)[0])
-    #     gt_ax.imshow(train_images[action_id])
-    #     gt_ax.set_title('Example of {}'.format(labels_list[i]))
-    #     gt_ax.axis('off')
+    with open("pretrained/resnet/predictions.pkl", 'rb') as file:
+        predictions, top_predictions = pickle.load(file)
+    fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+    for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+        temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+            hide_rest=False, min_weight=0.01)
+        c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+        c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
+        c_ax.axis('off')
+        action_id = np.random.choice(np.where(train_labels==i)[0])
+        gt_ax.imshow(train_images[action_id])
+        gt_ax.set_title('Example of {}'.format(labels_list[i]))
+        gt_ax.axis('off')
+    plt.show()
 
 
 #%%
@@ -228,7 +234,7 @@ def main(resplit=True, retrain=True):
             pickle.dump(data, file)
     else:
         with open("pretrained/resnet/train_val_test.pkl", 'rb') as file:
-            train_images, val_images, test_images,\
+            train_images, val_images, test_images, \
                 train_labels, val_labels, test_labels = pickle.load(file)
     
     with open("model/pickles/label_names.pkl", 'rb') as file:
@@ -243,15 +249,15 @@ def main(resplit=True, retrain=True):
 
     # evaluate bottleneck model
     evaluate_top_model(test_images, test_labels, save_predictions=True)
-    explain_top_model(test_images, test_labels, labels_list)
+    explain_top_model(train_images, train_labels, test_images, test_labels, labels_list)
 
 #%%
-main(False, False)
+# main(False, False)
 
 
-# if __name__ == "__main__":
-#     # main(True, True)
-#     main(False, False)
+if __name__ == "__main__":
+    # main(True, True)
+    main(False, False)
 
 
 #%%
