@@ -163,7 +163,7 @@ def evaluate_top_model(test_images, test_labels,
 
 #%%
 def explain_top_model(train_images, train_labels, test_images, test_labels,
-    labels_list, top_model_weights_path="pretrained/resnet/bottleneck.h5"):
+    labels_list, average="mean", top_model_weights_path="pretrained/resnet/bottleneck.h5"):
 
     # load ResNet
     initial_model = applications.ResNet50(include_top=False, weights='imagenet', input_shape=test_images.shape[1:])
@@ -217,13 +217,19 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
         # save average explanation
         if selection.shape[0] > 0:
             fig, ax = plt.subplots()
-            # average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
-            # using mean instead of mode
-            average_explanation = np.mean(mask_array, axis=0)
-            sns.heatmap(average_explanation, xticklabels=False, yticklabels=False, cbar_kws={'label': 'importance (low to high)'}, ax=ax)
-            # ax.imshow(average_explanation)
+            if average == "mode":
+                figname = "average_explanation_mode.jpg"
+                average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
+                # ax.imshow(average_explanation)
+                ax.imshow(label2rgb(average_explanation, bg_label=0), interpolation='nearest')
+            elif average == "mean":
+                figname = "average_explanation_mean.jpg"
+                average_explanation = np.mean(mask_array, axis=0)
+                sns.heatmap(average_explanation, vmin=0, vmax=1,
+                    xticklabels=False, yticklabels=False,
+                    cbar_kws={'label': 'importance (low to high)'}, ax=ax)
             ax.set_title("Average explanation")
-            plt.savefig("average_explanation.jpg")
+            plt.savefig(figname)
             plt.close(fig)
 
         os.chdir('../../../..')
@@ -262,7 +268,7 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
 
 
 #%%
-def main(resplit=True, retrain=True):
+def main(resplit=True, retrain=True, average="mean"):
     # set resplit to true to re-split train/val/test data, false to use existing
     # train/val/test split
     if resplit:
@@ -291,7 +297,7 @@ def main(resplit=True, retrain=True):
 
     # evaluate bottleneck model
     evaluate_top_model(test_images, test_labels, save_predictions=True)
-    explain_top_model(train_images, train_labels, test_images, test_labels, labels_list)
+    explain_top_model(train_images, train_labels, test_images, test_labels, labels_list, average=average)
 
 #%%
 # main(False, False)
@@ -299,7 +305,7 @@ def main(resplit=True, retrain=True):
 
 if __name__ == "__main__":
     # main(True, True)
-    main(False, False)
+    main(False, False, "mean")
 
 
 #%%
