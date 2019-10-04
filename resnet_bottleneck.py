@@ -226,7 +226,7 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
                 figname = "average_explanation_mean.jpg"
                 average_explanation = np.mean(mask_array, axis=0)
                 sns.heatmap(average_explanation, vmin=0, vmax=1,
-                    xticklabels=False, yticklabels=False,
+                    xticklabels=False, yticklabels=False, cmap='binary_r',
                     cbar_kws={'label': 'importance (low to high)'}, ax=ax)
             ax.set_title("Average explanation")
             plt.savefig(figname)
