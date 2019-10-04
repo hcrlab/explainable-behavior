@@ -1,4 +1,5 @@
 #%%
+import os
 import numpy as np
 import tensorflow as tf
 import cv2
@@ -171,52 +172,88 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
     top_model = Sequential()
     top_model.add(load_model(top_model_weights_path))
 
+    # construct final model
     preds = top_model(last)
     model = Model(initial_model.input, preds)
 
-    # # copy ResNet to a Sequential model
-    # new_model = Sequential()
-    # for layer in model.layers:
-    #     new_model.add(layer)
-
-    # # concatenate top model to ResNet
-    # new_model.add(top_model)
-
-    # compile model (probably don't need)
-    # model.compile(optimizer='adam',
-    #             loss='sparse_categorical_crossentropy',
-    #             metrics=['accuracy'])
-
-    explainer = lime_image.LimeImageExplainer(verbose=False)
-    segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
-
-    num_top_labels=4
-    explanation = explainer.explain_instance(test_images[0], classifier_fn=model.predict,
-        top_labels=num_top_labels, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
-    temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=True,
-        num_features=5, hide_rest=False)
-    fig, (ax1, ax2) = plt.subplots(1,2, figsize=(8, 4))
-    ax1.imshow(label2rgb(mask, temp, bg_label=0), interpolation='nearest')
-    ax1.set_title('Positive Regions for {}'.format(labels_list[test_labels[0]]))
-    temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=False,
-        num_features=10, hide_rest=False)
-    ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
-    ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
-
+    # get explanations
     with open("pretrained/resnet/predictions.pkl", 'rb') as file:
         predictions, top_predictions = pickle.load(file)
-    fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
-    for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
-        temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
-            hide_rest=False, min_weight=0.01)
-        c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
-        c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
-        c_ax.axis('off')
-        action_id = np.random.choice(np.where(train_labels==i)[0])
-        gt_ax.imshow(train_images[action_id])
-        gt_ax.set_title('Example of {}'.format(labels_list[i]))
-        gt_ax.axis('off')
-    plt.show()
+
+    # average explanations
+    explainer = lime_image.LimeImageExplainer(verbose=False)
+    segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
+    for i in np.unique(test_labels):
+        print("Generating average explanation for {} actions...".format(labels_list[i]))
+        # ensure we're in correct folder
+        assert os.getcwd().split('/')[-1] == 'explainability' 
+        # create necessary folders
+        while True:
+            try:
+                os.chdir('pretrained/resnet/explanations/{}/'.format(labels_list[i]))
+                break
+            except FileNotFoundError:
+                os.makedirs('pretrained/resnet/explanations/{}/'.format(labels_list[i]))
+
+        i_locations = np.where(top_predictions == i)[0]
+        # randomly pick 10 images; if there are fewer than ten to choose from just
+        # pick them all
+        selection = np.random.choice(i_locations, 10) if len(i_locations) > 10 else i_locations
+        # create mask array
+        mask_array = np.empty([selection.shape[0], 60, 80])
+
+        # generate explanation summary image for each selected image
+        for j in range(selection.shape[0]):
+            # create explanation
+            num_top_labels = 4
+            explanation = explainer.explain_instance(test_images[selection[j]], classifier_fn=model.predict,
+                top_labels=num_top_labels, hide_color=0, num_samples=1000, segmentation_fn=segmenter)
+            temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+                hide_rest=False, min_weight=0.01)
+            mask_array[j] = mask
+
+        # save average explanation
+        if selection.shape[0] > 0:
+            fig, ax = plt.subplots()
+            average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
+            ax.imshow(label2rgb(average_explanation, bg_label=0), interpolation='nearest')
+            ax.set_title("Average explanation")
+            plt.savefig("average_explanation.jpg")
+            plt.close(fig)
+
+        os.chdir('../../../')
+    print("done")
+
+
+    # single-image explanation
+    # explainer = lime_image.LimeImageExplainer(verbose=False)
+    # segmenter = SegmentationAlgorithm('slic', n_segments=100, compactness=1, sigma=1)
+
+    # num_top_labels=4
+    # explanation = explainer.explain_instance(test_images[0], classifier_fn=model.predict,
+    #     top_labels=num_top_labels, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
+    # temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=True,
+    #     num_features=5, hide_rest=False)
+    # fig, (ax1, ax2) = plt.subplots(1,2, figsize=(8, 4))
+    # ax1.imshow(label2rgb(mask, temp, bg_label=0), interpolation='nearest')
+    # ax1.set_title('Positive Regions for {}'.format(labels_list[test_labels[0]]))
+    # temp, mask = explanation.get_image_and_mask(test_labels[0], positive_only=False,
+    #     num_features=10, hide_rest=False)
+    # ax2.imshow(label2rgb(3-mask, temp, bg_label=0), interpolation = 'nearest')
+    # ax2.set_title('Positive/Negative Regions for {}'.format(labels_list[test_labels[0]]))
+
+    # fig, m_axs = plt.subplots(2,num_top_labels, figsize=(12,4))
+    # for i, (c_ax, gt_ax) in zip(explanation.top_labels, m_axs.T):
+    #     temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=5,
+    #         hide_rest=False, min_weight=0.01)
+    #     c_ax.imshow(label2rgb(mask,temp, bg_label=0), interpolation='nearest')
+    #     c_ax.set_title('Positive for {}\nScore:{:2.2f}%'.format(labels_list[i], 100*predictions[0, i]))
+    #     c_ax.axis('off')
+    #     action_id = np.random.choice(np.where(train_labels==i)[0])
+    #     gt_ax.imshow(train_images[action_id])
+    #     gt_ax.set_title('Example of {}'.format(labels_list[i]))
+    #     gt_ax.axis('off')
+    # plt.show()
 
 
 #%%
