@@ -1,4 +1,5 @@
 #%%
+import scipy.stats as stats
 import os
 import numpy as np
 import tensorflow as tf
@@ -17,6 +18,7 @@ from lime import lime_image
 from skimage.color import label2rgb
 from lime.wrappers.scikit_image import SegmentationAlgorithm
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 #%%
@@ -186,7 +188,7 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
     for i in np.unique(test_labels):
         print("Generating average explanation for {} actions...".format(labels_list[i]))
         # ensure we're in correct folder
-        assert os.getcwd().split('/')[-1] == 'explainability' 
+        assert os.getcwd().split('/')[-1] == 'explainable-behavior' 
         # create necessary folders
         while True:
             try:
@@ -215,13 +217,16 @@ def explain_top_model(train_images, train_labels, test_images, test_labels,
         # save average explanation
         if selection.shape[0] > 0:
             fig, ax = plt.subplots()
-            average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
-            ax.imshow(label2rgb(average_explanation, bg_label=0), interpolation='nearest')
+            # average_explanation = np.reshape(stats.mode(mask_array, axis=0)[0], (60, 80))
+            # using mean instead of mode
+            average_explanation = np.mean(mask_array, axis=0)
+            sns.heatmap(average_explanation, xticklabels=False, yticklabels=False, cbar_kws={'label': 'importance (low to high)'}, ax=ax)
+            # ax.imshow(average_explanation)
             ax.set_title("Average explanation")
             plt.savefig("average_explanation.jpg")
             plt.close(fig)
 
-        os.chdir('../../../')
+        os.chdir('../../../..')
     print("done")
 
 

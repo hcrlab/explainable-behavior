@@ -16,7 +16,7 @@ import pickle
 
 #%%
 # os.chdir("/home/hcrlab/cozmo/explainability/")
-os.chdir(os.path.expanduser("~/repos/explainability/"))
+os.chdir(os.path.expanduser("~/repos/explainable_behavior/"))
 
 #%% load model
 model = keras.models.load_model("model/cozmo_drive_model.h5")
